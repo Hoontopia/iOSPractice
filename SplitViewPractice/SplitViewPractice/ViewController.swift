@@ -7,15 +7,27 @@
 //
 
 import UIKit
+import Kingfisher
 
 class ViewController: UIViewController {
-    let data: [String] = []
+    @IBOutlet private weak var collectionView: UICollectionView!
+    @IBOutlet private weak var flowLayout: UICollectionViewFlowLayout!
+    
+    private var dataList: [OGData] = [] {
+        didSet {
+            collectionView.reloadData()
+        }
+    }
     
     // MARK: - Lifecycle Methods
     
     override func viewDidLoad() {
         super.viewDidLoad()
-        // Do any additional setup after loading the view, typically from a nib.
+        
+        flowLayout.itemSize = CGSize(width: collectionView.bounds.height, height: collectionView.bounds.height)
+        
+        let dropInteraction = UIDropInteraction(delegate: self)
+        self.view.addInteraction(dropInteraction)
     }
 }
 
@@ -23,15 +35,21 @@ class ViewController: UIViewController {
 
 extension ViewController: UICollectionViewDataSource {
     func collectionView(_ collectionView: UICollectionView, numberOfItemsInSection section: Int) -> Int {
-        return data.count
+        return dataList.count
     }
     
     func collectionView(_ collectionView: UICollectionView, cellForItemAt indexPath: IndexPath) -> UICollectionViewCell {
         let identifier = String(describing: DataCell.self)
+        let ogData = dataList[indexPath.item]
         
         guard let dataCell = collectionView.dequeueReusableCell(withReuseIdentifier: identifier, for: indexPath) as? DataCell else {
             return DataCell()
         }
+        
+        dataCell.prepare(title: ogData.title,
+                         description: ogData.description,
+                         imageURL: ogData.imageURL,
+                         addtionalInfo: ogData.url?.absoluteString)
         
         return dataCell
     }
@@ -41,12 +59,44 @@ extension ViewController: UICollectionViewDataSource {
 
 extension ViewController: UICollectionViewDelegate {
     
+    func collectionView(_ collectionView: UICollectionView, didEndDisplaying cell: UICollectionViewCell, forItemAt indexPath: IndexPath) {
+        let identifier = String(describing: DataCell.self)
+
+        guard let dataCell = collectionView.dequeueReusableCell(withReuseIdentifier: identifier, for: indexPath) as? DataCell else {
+            return
+        }
+        
+        dataCell.cancelImageDownload()
+    }
 }
 
-// MARK: - UICollectionViewDropDelegate
+// MARK: - UIDropInteractionDelegate
 
-extension ViewController: UICollectionViewDropDelegate {
-    func collectionView(_ collectionView: UICollectionView, performDropWith coordinator: UICollectionViewDropCoordinator) {
+extension ViewController: UIDropInteractionDelegate {
+    func dropInteraction(_ interaction: UIDropInteraction, canHandle session: UIDropSession) -> Bool {
+        return session.canLoadObjects(ofClass: NSURL.self)
+    }
+    
+    func dropInteraction(_ interaction: UIDropInteraction, sessionDidUpdate session: UIDropSession) -> UIDropProposal {
+        let operation: UIDropOperation
+        operation = session.localDragSession == nil ? .copy : .move
         
+        return UIDropProposal(operation: operation)
+    }
+    
+    func dropInteraction(_ interaction: UIDropInteraction, performDrop session: UIDropSession) {
+        session.loadObjects(ofClass: NSURL.self, completion: { [weak self] result in
+            guard let `self` = self else {
+                return
+            }
+            
+            guard let targetUrl = result.first as? NSURL else {
+                return
+            }
+            
+            if let data = OGData.ogData(from: targetUrl as URL) {
+                self.dataList.append(data)
+            }
+        })
     }
 }
